@@ -27,27 +27,86 @@ jobs:
       - name: Instalar SDK Android
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
+      - name: Preparar proyecto
+        shell: bash
+        run: |
+          set -e
+
+          echo "Buscando ZIP del proyecto..."
+
+          ZIP=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No se encontró ningún ZIP."
+            exit 1
+          fi
+
+          echo "ZIP encontrado: $ZIP"
+
+          mkdir -p proyecto
+          unzip -o "$ZIP" -d proyecto
+
+          echo "Contenido extraído:"
+          find proyecto -maxdepth 4 -type f | head -100
+
+          APP_GRADLE=$(find proyecto -type f \
+            \( -name "build.gradle" -o -name "build.gradle.kts" \) \
+            -path "*/app/*" | head -n 1)
+
+          if [ -z "$APP_GRADLE" ]; then
+            echo "ERROR: No se encontró el módulo Android 'app'."
+            echo "Archivos encontrados:"
+            find proyecto -type f | head -200
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$(dirname "$APP_GRADLE")")
+
+          echo "Proyecto Android encontrado en:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
       - name: Verificar proyecto
         run: |
-          echo "Archivos del proyecto:"
-          ls -la
-          echo "Carpeta app:"
-          ls -la app
+          echo "Proyecto:"
+          echo "$PROJECT_DIR"
+
+          echo "Contenido:"
+          ls -la "$PROJECT_DIR"
+
+          echo "Módulo app:"
+          ls -la "$PROJECT_DIR/app"
 
       - name: Compilar APK
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon
+          cd "$PROJECT_DIR"
+          gradle :app:assembleDebug \
+            --stacktrace \
+            --no-daemon
+
+      - name: Buscar APK
+        run: |
+          echo "APKs generados:"
+          find "$PROJECT_DIR" \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            proyecto/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
