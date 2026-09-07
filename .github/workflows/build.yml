@@ -3,6 +3,9 @@ name: Construir APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - master
 
 permissions:
   contents: read
@@ -15,98 +18,94 @@ jobs:
       - name: Descargar código
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK Android
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      - name: Preparar proyecto
+      - name: Buscar proyecto Android
         shell: bash
         run: |
           set -e
 
-          echo "Buscando ZIP del proyecto..."
+          echo "Buscando gradlew..."
 
-          ZIP=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+          if [ -f "./gradlew" ]; then
+            PROJECT_DIR="."
+          elif [ -f "./proyecto/gradlew" ]; then
+            PROJECT_DIR="./proyecto"
+          else
+            PROJECT_DIR="$(find . -name gradlew -type f -not -path '*/.git/*' | head -n 1 | xargs -r dirname)"
 
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: No se encontró ningún ZIP."
-            exit 1
+            if [ -z "$PROJECT_DIR" ]; then
+              echo "ERROR: No se encontró gradlew."
+              find . -maxdepth 4 -type f | sort | head -200
+              exit 1
+            fi
           fi
 
-          echo "ZIP encontrado: $ZIP"
+          PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
-          mkdir -p proyecto
-          unzip -o "$ZIP" -d proyecto
-
-          echo "Contenido extraído:"
-          find proyecto -maxdepth 4 -type f | head -100
-
-          APP_GRADLE=$(find proyecto -type f \
-            \( -name "build.gradle" -o -name "build.gradle.kts" \) \
-            -path "*/app/*" | head -n 1)
-
-          if [ -z "$APP_GRADLE" ]; then
-            echo "ERROR: No se encontró el módulo Android 'app'."
-            echo "Archivos encontrados:"
-            find proyecto -type f | head -200
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$(dirname "$APP_GRADLE")")
-
-          echo "Proyecto Android encontrado en:"
+          echo "Proyecto encontrado en:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Verificar proyecto
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Dar permisos a Gradle
+        shell: bash
         run: |
-          echo "Proyecto:"
-          echo "$PROJECT_DIR"
+          set -e
+          cd "$PROJECT_DIR"
 
-          echo "Contenido:"
-          ls -la "$PROJECT_DIR"
+          if [ ! -f "./gradlew" ]; then
+            echo "ERROR: gradlew no existe en $PROJECT_DIR"
+            ls -la
+            exit 1
+          fi
 
-          echo "Módulo app:"
-          ls -la "$PROJECT_DIR/app"
+          chmod +x ./gradlew
+          ls -la ./gradlew
+
+      - name: Verificar proyecto
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          echo "Archivos del proyecto:"
+          ls -la
+
+          echo "Estructura:"
+          find . -maxdepth 3 -type f \
+            \( -name "*.gradle" -o -name "*.gradle.kts" -o -name "gradle.properties" -o -name "settings.gradle*" \) \
+            -print
 
       - name: Compilar APK
+        shell: bash
         run: |
+          set -e
           cd "$PROJECT_DIR"
-          gradle :app:assembleDebug \
+
+          ./gradlew clean assembleDebug \
             --stacktrace \
-            --no-daemon
+            --no-daemon \
+            --console=plain
 
       - name: Buscar APK
+        shell: bash
         run: |
-          echo "APKs generados:"
-          find "$PROJECT_DIR" \
-            -type f \
-            -name "*.apk" \
-            -print
+          set -e
+          cd "$PROJECT_DIR"
+
+          echo "APKs encontrados:"
+          find . -type f -name "*.apk" -print
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-APK
+          name: JARVIS-debug-apk
           path: |
-            proyecto/**/build/outputs/apk/debug/*.apk
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
