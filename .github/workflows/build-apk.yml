@@ -1,4 +1,4 @@
-name: Build JARVIS APK
+name: Compilar JARVIS APK
 
 on:
   workflow_dispatch:
@@ -9,26 +9,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar código
+      - name: Descargar proyecto
         uses: actions/checkout@v4
 
-      - name: Configurar Java
+      - name: Descomprimir proyecto
+        run: |
+          mkdir proyecto
+          unzip -q jarvis-completo.zip -d proyecto
+
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Android
+      - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Dar permisos a Gradle
-        run: chmod +x gradlew
+      - name: Instalar Android SDK 34
+        run: |
+          sdkmanager "platforms;android-34"
+          sdkmanager "build-tools;34.0.0"
+
+      - name: Configurar Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Compilar APK
-        run: ./gradlew assembleDebug
+        working-directory: proyecto
+        run: gradle assembleDebug --no-daemon
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: proyecto/app/build/outputs/apk/debug/*.apk
