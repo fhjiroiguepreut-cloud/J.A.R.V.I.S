@@ -10,62 +10,48 @@ jobs:
 
     steps:
 
-      # 1. Descargar el repositorio
       - name: Descargar proyecto
         uses: actions/checkout@v4
 
-      # 2. Preparar el proyecto
       - name: Preparar proyecto
         run: |
           mkdir -p proyecto
 
-          if [ -f "jarvis-completo-corregido.zip" ]; then
-            echo "Usando jarvis-completo-corregido.zip"
-            unzip -q "jarvis-completo-corregido.zip" -d proyecto
-
-          elif [ -f "jarvis-completo.zip" ]; then
-            echo "Usando jarvis-completo.zip"
-            unzip -q "jarvis-completo.zip" -d proyecto
-
+          if [ -f "jarvis-completo-final.zip" ]; then
+            echo "Usando jarvis-completo-final.zip"
+            unzip -q "jarvis-completo-final.zip" -d proyecto
           else
-            echo "ERROR: No se encontró ningún ZIP del proyecto."
+            echo "ERROR: No se encontró jarvis-completo-final.zip"
             echo "Archivos disponibles:"
             ls -la
             exit 1
           fi
 
-          echo "Contenido del proyecto:"
-          find proyecto -maxdepth 3 -type f | head -100
+          echo "Proyecto preparado correctamente."
 
-      # 3. Configurar Java 17
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 4. Configurar Android SDK
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
-      # 5. Instalar Android SDK 34
-      - name: Instalar Android SDK
+      - name: Instalar Android SDK 34
         run: |
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
-      # 6. Configurar Gradle 8.7
       - name: Configurar Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 7. Compilar APK
       - name: Compilar APK
         working-directory: proyecto
         run: |
           gradle assembleDebug --no-daemon --stacktrace
 
-      # 8. Guardar el APK
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
